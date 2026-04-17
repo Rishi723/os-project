@@ -111,4 +111,4 @@ if __name__ == "__main__":
     elif cmd == "status":
         status()
     else:
-        print("Invalid command or missing arguments.")
+        print("Invalid command or missing arguments.")  #done
