@@ -1,16 +1,41 @@
 import time
 import threading
 import requests
+import os
+import json
 from flask import Flask, request, jsonify
 from config import REPLICATION_FACTOR, HEARTBEAT_INTERVAL, NODE_TIMEOUT, COORDINATOR_PORT, STORAGE_NODES
 
 app = Flask(__name__)
+METADATA_FILE = "metadata.json"
 
 # metadata: {filename: [{chunk_id, nodes:[node_id,...]}]}
 file_metadata = {}
 node_status = {n["id"]: {"info": n, "last_seen": time.time(), "alive": True} for n in STORAGE_NODES}
 lock = threading.Lock()
 
+# 🔷 Load metadata at startup
+def load_metadata():
+    global file_metadata
+    if os.path.exists(METADATA_FILE):
+        try:
+            with open(METADATA_FILE, "r") as f:
+                file_metadata = json.load(f)
+            print("[COORDINATOR] Metadata loaded successfully")
+        except Exception as e:
+            print(f"[COORDINATOR] Failed to load metadata: {e}")
+            file_metadata = {}
+    else:
+        file_metadata = {}
+
+
+# 🔷 Save metadata to disk
+def save_metadata():
+    try:
+        with open(METADATA_FILE, "w") as f:
+            json.dump(file_metadata, f, indent=2)
+    except Exception as e:
+        print(f"[COORDINATOR] Failed to save metadata: {e}")
 
 def get_alive_nodes():
     return [v["info"] for v in node_status.values() if v["alive"]]
@@ -64,6 +89,8 @@ def re_replicate(failed_node_id):
                             print(f"[COORDINATOR] Re-replicated chunk {chunk['chunk_id']} to {target['id']}")
                     except Exception as e:
                         print(f"[COORDINATOR] Re-replication error: {e}")
+    save_metadata()  # ✅ persist changes
+                    
 
 
 @app.route("/heartbeat/<node_id>", methods=["POST"])
@@ -84,7 +111,8 @@ def register_chunk():
     with lock:
         if filename not in file_metadata:
             file_metadata[filename] = []
-        file_metadata[filename].append({"chunk_id": chunk_id, "nodes": nodes})
+        file_metadata[filename].append({"chunk_id": chunk_id, "nodes": nodes,"hash": data["hash"]   })    # ✅ NEW
+        save_metadata()  # ✅ persist
     return jsonify({"status": "registered"})
 
 
@@ -110,6 +138,7 @@ def allocate():
 def delete_file(filename):
     with lock:
         chunks = file_metadata.pop(filename, None)
+        save_metadata() # ✅ save after deletion
     if not chunks:
         return jsonify({"error": "File not found"}), 404
     for chunk in chunks:
@@ -134,6 +163,7 @@ def status():
 
 
 if __name__ == "__main__":
+    load_metadata() # ✅ load on startup
     threading.Thread(target=monitor_nodes, daemon=True).start()
     print(f"[COORDINATOR] Running on port {COORDINATOR_PORT}")
     app.run(host="0.0.0.0", port=COORDINATOR_PORT)
