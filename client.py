@@ -1,6 +1,7 @@
 import os
 import math
 import requests
+import hashlib # ✅ NEW
 from config import COORDINATOR_HOST, COORDINATOR_PORT, CHUNK_SIZE
 
 BASE = f"http://{COORDINATOR_HOST}:{COORDINATOR_PORT}"
@@ -14,6 +15,7 @@ def upload(filepath):
     with open(filepath, "rb") as f:
         for i in range(total_chunks):
             chunk_data = f.read(CHUNK_SIZE)
+            chunk_hash = hashlib.sha256(chunk_data).hexdigest() # ✅ NEW
             chunk_id = f"{filename}_chunk{i}"
 
             # Ask coordinator which nodes to use
@@ -41,7 +43,8 @@ def upload(filepath):
             requests.post(f"{BASE}/register_chunk", json={
                 "filename": filename,
                 "chunk_id": chunk_id,
-                "nodes": stored_on
+                "nodes": stored_on,
+                 "hash": chunk_hash  # ✅ NEW
             })
             print(f"[CLIENT] Uploaded chunk {i+1}/{total_chunks} -> {stored_on}")
 
@@ -69,6 +72,10 @@ def download(filename, output_path):
                     resp = requests.get(f"http://{node['host']}:{node['port']}/chunk/{chunk['chunk_id']}")
                     if resp.status_code == 200:
                         data = resp.content
+                        calculated_hash = hashlib.sha256(data).hexdigest()
+                        if calculated_hash != chunk["hash"]:
+                            print(f"[CLIENT] Corruption detected in {chunk['chunk_id']} from {node_id}")
+                            continue  
                         break
                 except Exception:
                     continue
