@@ -6,7 +6,7 @@ from config import COORDINATOR_HOST, COORDINATOR_PORT, CHUNK_SIZE
 
 BASE = f"http://{COORDINATOR_HOST}:{COORDINATOR_PORT}"
 
-
+#Main function
 def upload(filepath):
     filename = os.path.basename(filepath)
     file_size = os.path.getsize(filepath)
