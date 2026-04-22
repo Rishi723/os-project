@@ -91,7 +91,7 @@ def delete(filename):
     r = requests.delete(f"{BASE}/delete/{filename}")
     print(f"[CLIENT] Delete response: {r.json()}")
 
-
+#status
 def status():
     r = requests.get(f"{BASE}/status")
     import json
